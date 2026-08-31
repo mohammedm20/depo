@@ -24,7 +24,9 @@ function getCatLoc(cat: any, lang: Language) {
 import { getBrandImage } from "../utils/brandImages";
 import { getProductBrandSlug } from "../utils/brandUtils";
 
-const searchUrl = lang === DEFAULT_LANGUAGE ? "/arama" : `/${lang}/arama`;
+const base = (import.meta.env.BASE_URL || "/").replace(/\/$/, "");
+const searchPath = lang === DEFAULT_LANGUAGE ? "/arama" : `/${lang}/arama`;
+const searchUrl = base ? `${base}${searchPath}` : searchPath;
 
 // 1. Identify Root Categories
 const rootCategories = Object.values(categories).filter(
@@ -46,12 +48,17 @@ const brandCategories = Object.values(categories).filter(
 const brandsMap = new Map();
 
 brandCategories.forEach((cat: any) => {
-  const name = getCatLoc(cat, lang).name;
-  const canonicalSlug = getProductBrandSlug(cat.slug); // Using the same normalization logic
+  const loc = getCatLoc(cat, lang);
+  const name = (loc.name || cat.i18n?.["en"]?.name || cat.i18n?.["tr"]?.name || "").trim();
+  const canonicalSlug = getProductBrandSlug(cat.slug);
+
+  // Exclude invalid, empty, or fallback "Other" entries
+  if (!canonicalSlug || canonicalSlug.toLowerCase() === "other" || !name) return;
   
+  const brandImage = getBrandImage(canonicalSlug, cat.slug);
+
   if (!brandsMap.has(canonicalSlug)) {
     // Dedup by canonical slug
-    const brandImage = getBrandImage(canonicalSlug, cat.slug);
     brandsMap.set(canonicalSlug, {
       name: name,
       slug: canonicalSlug,
@@ -60,11 +67,8 @@ brandCategories.forEach((cat: any) => {
   } else {
     // If brand was already added but has no image, attempt to resolve image from this category
     const existing = brandsMap.get(canonicalSlug);
-    if (!existing.image) {
-      const brandImage = getBrandImage(canonicalSlug, cat.slug);
-      if (brandImage) {
-        existing.image = brandImage;
-      }
+    if (!existing.image && brandImage) {
+      existing.image = brandImage;
     }
   }
 });
